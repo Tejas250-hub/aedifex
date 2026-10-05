@@ -813,7 +813,7 @@ export function formatSceneContextForPrompt(ctx: SceneContext): string {
   }
 
   // Inject recent tool errors to help LLM avoid repeating mistakes (#6)
-  const recentErrors = useAIChat.getState().getRecentErrors()
+  const recentErrors = useAIChat.getState().getRecentErrors?.() ?? []
   if (recentErrors.length > 0) {
     lines.push('')
     lines.push('## Recent Errors (avoid repeating these)')

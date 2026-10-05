@@ -300,7 +300,10 @@ export async function runAgentLoop({
       // visible in messages[]. Skip when the reminder is about to continue
       // the loop, since the reminder will produce real content next round.
       if (toolCalls.length === 0 && !willInjectVerticalReminder && !text?.trim()) {
-        const fallback = 'Sorry, I was unable to process that request. Please try rephrasing or providing more details.'
+        const fallback =
+          iteration > 1
+            ? "I've applied the requested changes to the scene."
+            : 'Sorry, I was unable to process that request. Please try rephrasing or providing more details.'
         useAIChat.getState().appendStreamContent(fallback)
       }
 

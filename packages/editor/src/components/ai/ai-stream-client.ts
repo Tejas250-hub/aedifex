@@ -137,6 +137,7 @@ export async function parseSseChatStream(
   const decoder = new TextDecoder()
   let buffer = ''
   let fullText = ''
+  let reasoningText = ''
   const toolCalls: AIToolCall[] = []
   // BUG FIX A-8: Guard against onComplete being called twice (once on finish_reason, once after loop)
   let completed = false
@@ -200,6 +201,12 @@ export async function parseSseChatStream(
           callbacks.onTextChunk(text)
         }
 
+        // Handle reasoning tokens (models like DeepSeek-R1, Nemotron, Qwen)
+        const reasoningDelta = (delta.reasoning ?? delta.reasoning_content ?? delta.thought ?? delta.thinking) as string | undefined
+        if (reasoningDelta && typeof reasoningDelta === 'string') {
+          reasoningText += reasoningDelta
+        }
+
         // Handle tool calls (streamed by index)
         const deltaToolCalls = delta.tool_calls as Array<Record<string, unknown>> | undefined
         if (deltaToolCalls) {
@@ -228,6 +235,10 @@ export async function parseSseChatStream(
         // Check if stream is complete
         const finishReason = choice.finish_reason as string | null
         if (finishReason) {
+          if (finishReason === 'length') {
+            console.warn('[AI Stream] Model response reached max_tokens limit')
+          }
+
           // Assemble all accumulated tool calls
           const toolCallIds: string[] = []
           for (const [, pending] of pendingTools) {
@@ -239,6 +250,8 @@ export async function parseSseChatStream(
                 toolCalls.push(toolCall)
                 toolCallIds.push(pending.id)
                 callbacks.onToolCall(toolCall)
+              } else {
+                console.warn(`[AI Stream] Unrecognized tool call: "${pending.name}"`)
               }
             } catch (parseError) {
               console.error(`Failed to parse tool call arguments for ${pending.name}:`, parseError)
@@ -250,6 +263,16 @@ export async function parseSseChatStream(
                 `Tool call "${pending.name}" had invalid arguments: ${reason}. Raw: ${preview}`,
               )
               continue
+            }
+          }
+
+          // If the model produced reasoning output without text content or tool calls,
+          // surface the reasoning text so the user gets an actual response rather than an empty fallback
+          if (!fullText.trim() && toolCalls.length === 0 && reasoningText.trim()) {
+            const cleanReasoning = reasoningText.replace(/<\/?think>/gi, '').trim()
+            if (cleanReasoning) {
+              fullText = cleanReasoning
+              callbacks.onTextChunk(fullText)
             }
           }
 
@@ -272,6 +295,8 @@ export async function parseSseChatStream(
             toolCalls.push(toolCall)
             toolCallIds.push(pending.id)
             callbacks.onToolCall(toolCall)
+          } else {
+            console.warn(`[AI Stream] Unrecognized tool call: "${pending.name}"`)
           }
         } catch (parseError) {
           console.error(`Failed to parse tool call arguments for ${pending.name}:`, parseError)
@@ -283,6 +308,14 @@ export async function parseSseChatStream(
             `Tool call "${pending.name}" had invalid arguments: ${reason}. Raw: ${preview}`,
           )
           continue
+        }
+      }
+
+      if (!fullText.trim() && toolCalls.length === 0 && reasoningText.trim()) {
+        const cleanReasoning = reasoningText.replace(/<\/?think>/gi, '').trim()
+        if (cleanReasoning) {
+          fullText = cleanReasoning
+          callbacks.onTextChunk(fullText)
         }
       }
 
