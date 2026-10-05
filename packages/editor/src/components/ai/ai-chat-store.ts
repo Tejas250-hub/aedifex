@@ -2,7 +2,7 @@ import { nanoid } from 'nanoid'
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { abortActiveLoop } from './ai-agent-loop'
-import { undoConfirmedOperation } from './ai-preview-manager'
+import { clearGhostPreview, undoConfirmedOperation } from './ai-preview-manager'
 import { shouldAutoCompact } from './ai-token-estimator'
 import { getAIRuntime } from './runtime'
 import type {
@@ -479,6 +479,7 @@ export const useAIChat = create<AIChatState & AIChatActions>()(
   clearChat: () => {
     // Abort any in-flight agent loop / HTTP stream to prevent stale callbacks
     abortActiveLoop()
+    clearGhostPreview()
     // Revoke all screenshot Object URLs to free blob memory
     for (const msg of get().messages) {
       if (msg.screenshotBefore) URL.revokeObjectURL(msg.screenshotBefore)
